@@ -219,14 +219,27 @@ function App() {
  function exportData(){const blob=new Blob([JSON.stringify({exportedAt:new Date().toISOString(),profile:store.profile,foods:store.foods,logs:store.logs,dishes:store.dishes,favorites:store.favorites,recipeFavorites:store.recipeFavorites,recent:store.recent,weights:store.weights,reminder:store.reminder},null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='mi-nutricion-datos.json';a.click();URL.revokeObjectURL(url);notify('Copia de tus datos descargada.');}
   function removePersonalData(){if(!window.confirm('¿Borrar todos tus datos personales guardados en tu cuenta y en este navegador? El catálogo BEDCA y los ejemplos se conservarán.'))return;if(!clearPersonalStore()){notify('No se pudieron borrar los datos del navegador.');return;}const reminder={enabled:false,times:['09:00','13:00','20:00']};setStore({profile:null,foods:[],logs:[],dishes:[],favorites:[],recipeFavorites:[],recent:[],weights:[],reminder});setProfileForm(blankProfile);setReminderDraft(reminder);notify('Tus datos personales se han borrado.');}
  async function handleSignOut(){
-  await supabase.auth.signOut();
-  clearPersonalStore();
-  const reminder={enabled:false,times:['09:00','13:00','20:00']};
-  setStore({profile:null,foods:[],logs:[],dishes:[],favorites:[],recipeFavorites:[],recent:[],weights:[],reminder});
-  setProfileForm(blankProfile);
-  setReminderDraft(reminder);
-  notify('Sesión cerrada.');
- }
+    try {
+        await supabase.auth.signOut({ scope: 'local' });
+      } finally {
+        clearPersonalStore();
+        const reminder = { enabled: false, times: ['09:00', '13:00', '20:00'] };
+        setStore({
+          profile: null,
+          foods: [],
+          logs: [],
+          dishes: [],
+          favorites: [],
+          recipeFavorites: [],
+          recent: [],
+          weights: [],
+          reminder,
+        });
+        setProfileForm(blankProfile);
+        setReminderDraft(reminder);
+        notify('Sesión cerrada.');
+      }
+  }
 
  if(authLoading||(session&&!cloudReady)){
   return <div className="app-shell">
