@@ -1,7 +1,10 @@
 import { type FormEvent, useState } from 'react';
+import { useLang } from '../lib/i18n';
 import { supabase } from '../lib/supabase';
 
 export default function AuthGate() {
+  const [lang, setLang] = useLang();
+  const isEn = lang === 'en';
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -32,7 +35,11 @@ export default function AuthGate() {
 
     const cleanEmail = email.trim();
     if (!cleanEmail || password.length < 6) {
-      setError('Introduce un correo válido y una contraseña de al menos 6 caracteres.');
+      setError(
+        isEn
+          ? 'Enter a valid email and a password of at least 6 characters.'
+          : 'Introduce un correo válido y una contraseña de al menos 6 caracteres.'
+      );
       return;
     }
 
@@ -52,11 +59,21 @@ export default function AuthGate() {
         });
         if (signUpError) throw signUpError;
         if (!data.session) {
-          setInfo('Cuenta creada. Revisa tu bandeja de entrada para confirmar tu correo.');
+          setInfo(
+            isEn
+              ? 'Account created. Check your inbox to confirm your email.'
+              : 'Cuenta creada. Revisa tu bandeja de entrada para confirmar tu correo.'
+          );
         }
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo completar el acceso.');
+      setError(
+        err instanceof Error
+          ? err.message
+          : isEn
+          ? 'Could not complete sign in.'
+          : 'No se pudo completar el acceso.'
+      );
     } finally {
       setLoading(false);
     }
@@ -65,12 +82,34 @@ export default function AuthGate() {
   return (
     <main className="page-wrap" style={{ maxWidth: 460, paddingTop: 48 }}>
       <section className="card panel">
-        <div className="eyebrow">Mi Nutrición · Espacio en la nube</div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+          <div className="eyebrow">
+            {isEn ? 'Mi Nutrición · Cloud Space' : 'Mi Nutrición · Espacio en la nube'}
+          </div>
+          <button
+            type="button"
+            className="button ghost small"
+            onClick={() => setLang(isEn ? 'es' : 'en')}
+            aria-label={isEn ? 'Cambiar a español' : 'Switch to English'}
+            data-testid="button-auth-toggle-lang"
+          >
+            {isEn ? 'ES' : 'EN'}
+          </button>
+        </div>
+
         <h1 className="serif" style={{ fontSize: 30, margin: '8px 0 8px' }}>
-          {mode === 'login' ? 'Inicia sesión en tu espacio' : 'Crea tu cuenta personal'}
+          {mode === 'login'
+            ? isEn
+              ? 'Sign in to your space'
+              : 'Inicia sesión en tu espacio'
+            : isEn
+            ? 'Create your personal account'
+            : 'Crea tu cuenta personal'}
         </h1>
         <p className="small-text muted" style={{ marginBottom: 20 }}>
-          Guarda tu perfil, alimentos y registros diarios de forma privada para acceder desde cualquier dispositivo.
+          {isEn
+            ? 'Save your profile, foods, and daily logs privately to access them from any device.'
+            : 'Guarda tu perfil, alimentos y registros diarios de forma privada para acceder desde cualquier dispositivo.'}
         </p>
 
         <button
@@ -81,14 +120,14 @@ export default function AuthGate() {
           disabled={loading}
           data-testid="button-google-login"
         >
-          Continuar con Google
+          {isEn ? 'Continue with Google' : 'Continuar con Google'}
         </button>
 
         <div className="divider" style={{ margin: '18px 0' }} />
 
         <form onSubmit={(e) => void handleEmailSubmit(e)} className="grid">
           <div className="field">
-            <label htmlFor="auth-email">Correo electrónico</label>
+            <label htmlFor="auth-email">{isEn ? 'Email address' : 'Correo electrónico'}</label>
             <input
               id="auth-email"
               className="input"
@@ -97,12 +136,12 @@ export default function AuthGate() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="tu@correo.com"
+              placeholder={isEn ? 'you@email.com' : 'tu@correo.com'}
             />
           </div>
 
           <div className="field">
-            <label htmlFor="auth-password">Contraseña</label>
+            <label htmlFor="auth-password">{isEn ? 'Password' : 'Contraseña'}</label>
             <input
               id="auth-password"
               className="input"
@@ -112,7 +151,7 @@ export default function AuthGate() {
               minLength={6}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Mínimo 6 caracteres"
+              placeholder={isEn ? 'At least 6 characters' : 'Mínimo 6 caracteres'}
             />
           </div>
 
@@ -135,15 +174,27 @@ export default function AuthGate() {
             data-testid="button-email-submit"
           >
             {loading
-              ? 'Procesando…'
+              ? isEn
+                ? 'Processing…'
+                : 'Procesando…'
               : mode === 'login'
-              ? 'Entrar con correo'
+              ? isEn
+                ? 'Sign in with email'
+                : 'Entrar con correo'
+              : isEn
+              ? 'Create account'
               : 'Crear cuenta'}
           </button>
         </form>
 
         <p className="small-text muted" style={{ marginTop: 16, marginBottom: 0, textAlign: 'center' }}>
-          {mode === 'login' ? '¿Aún no tienes cuenta? ' : '¿Ya tienes cuenta? '}
+          {mode === 'login'
+            ? isEn
+              ? "Don't have an account yet? "
+              : '¿Aún no tienes cuenta? '
+            : isEn
+            ? 'Already have an account? '
+            : '¿Ya tienes cuenta? '}
           <button
             type="button"
             className="button ghost small"
@@ -153,7 +204,13 @@ export default function AuthGate() {
               setInfo('');
             }}
           >
-            {mode === 'login' ? 'Regístrate aquí' : 'Inicia sesión'}
+            {mode === 'login'
+              ? isEn
+                ? 'Sign up here'
+                : 'Regístrate aquí'
+              : isEn
+              ? 'Sign in'
+              : 'Inicia sesión'}
           </button>
         </p>
       </section>
