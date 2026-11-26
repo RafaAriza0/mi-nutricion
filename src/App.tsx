@@ -2161,31 +2161,68 @@ function RecipeSection({
   const [lang] = useLang();
   const isEn = lang === 'en';
   const t = i18n[lang];
+  const locale = getLocale(lang);
 
-  const [availableIds, setAvailableIds] = useState<string[]>([]);
+  const normalizeFoodName = (food: Food) =>
+    foodDisplayName(food.id, food.name, lang).trim().toLocaleLowerCase(locale);
+
+  const [availableNames, setAvailableNames] = useState<string[]>([]);
   const [availableOnly, setAvailableOnly] = useState(false);
-  const [excluded, setExcluded] = useState<string[]>([]);
+  const [excludedNames, setExcludedNames] = useState<string[]>([]);
+
+  useEffect(() => {
+    setAvailableNames([]);
+    setExcludedNames([]);
+  }, [lang]);
+
+  const recipeFoods = useMemo(() => {
+    const usedIds = new Set(recipes.flatMap(r => r.ingredients.map(i => i.foodId)));
+    const byName = new Map<string, { key: string; label: string }>();
+
+    foods
+      .filter(f => usedIds.has(f.id))
+      .forEach(f => {
+        const label = foodDisplayName(f.id, f.name, lang).trim();
+        const key = label.toLocaleLowerCase(locale);
+        if (!byName.has(key)) {
+          byName.set(key, { key, label });
+        }
+      });
+
+    return [...byName.values()].sort((a, b) => a.label.localeCompare(b.label, locale));
+  }, [recipes, foods, lang, locale]);
+
   const favoriteFoods = foods.filter(f => favorites.includes(f.id));
+  const favoriteFoodNames = new Set(favoriteFoods.map(normalizeFoodName));
   const avoidedNames = (profile?.avoid ?? '')
     .split(',')
     .map(x => x.trim().toLowerCase())
     .filter(Boolean);
-  const recipeFoods = useMemo(() => {
-    const usedIds = new Set(recipes.flatMap(r => r.ingredients.map(i => i.foodId)));
-    return foods
-      .filter(f => usedIds.has(f.id))
-      .sort((a, b) =>
-        foodDisplayName(a.id, a.name, lang).localeCompare(
-          foodDisplayName(b.id, b.name, lang),
-          getLocale(lang)
-        )
-      );
-  }, [recipes, foods, lang]);
+
   const list = recipes
     .filter(r => !filters.favorites || recipeFavorites.includes(r.id))
-    .filter(r => !filters.available || r.ingredients.every(i => favoriteFoods.some(f => f.id === i.foodId)))
-    .filter(r => !availableOnly || r.ingredients.every(i => availableIds.includes(i.foodId)))
-    .filter(r => r.ingredients.every(i => !excluded.includes(i.foodId)))
+    .filter(
+      r =>
+        !filters.available ||
+        r.ingredients.every(i => {
+          const food = foodById(i.foodId, foods);
+          return food ? favoriteFoodNames.has(normalizeFoodName(food)) : false;
+        })
+    )
+    .filter(
+      r =>
+        !availableOnly ||
+        r.ingredients.every(i => {
+          const food = foodById(i.foodId, foods);
+          return food ? availableNames.includes(normalizeFoodName(food)) : false;
+        })
+    )
+    .filter(r =>
+      r.ingredients.every(i => {
+        const food = foodById(i.foodId, foods);
+        return food ? !excludedNames.includes(normalizeFoodName(food)) : true;
+      })
+    )
     .filter(r => !r.ingredients.some(i => avoidedNames.some(name => foodById(i.foodId, foods)?.name.toLowerCase().includes(name))))
     .filter(r => !filters.maxTime || r.minutes <= Number(filters.maxTime))
     .filter(r => !filters.budget || (r.cost !== undefined && r.cost <= Number(filters.budget)))
@@ -2209,16 +2246,16 @@ function RecipeSection({
       <section className="card panel">
         <div className="eyebrow">{t.recipes.refineEyebrow}</div>
         <div className="tab-row">
-          <button className={`tab ${filters.favorites ? 'selected' : ''}`} onClick={() => toggle('favorites')} data-testid="toggle-recipe-favorites">
+          <button type="button" className={`tab ${filters.favorites ? 'selected' : ''}`} onClick={() => toggle('favorites')} data-testid="toggle-recipe-favorites">
             {t.recipes.favRecipes}
           </button>
-          <button className={`tab ${filters.available ? 'selected' : ''}`} onClick={() => toggle('available')} data-testid="toggle-recipe-available">
+          <button type="button" className={`tab ${filters.available ? 'selected' : ''}`} onClick={() => toggle('available')} data-testid="toggle-recipe-available">
             {t.recipes.favFoodsBased}
           </button>
-          <button className={`tab ${availableOnly ? 'selected' : ''}`} onClick={() => setAvailableOnly(!availableOnly)} data-testid="toggle-recipe-available-in-pantry">
+          <button type="button" className={`tab ${availableOnly ? 'selected' : ''}`} onClick={() => setAvailableOnly(!availableOnly)} data-testid="toggle-recipe-available-in-pantry">
             {t.recipes.onlyPantry}
           </button>
-          <button className={`tab ${filters.fit ? 'selected' : ''}`} onClick={() => toggle('fit')} data-testid="toggle-recipe-fit">
+          <button type="button" className={`tab ${filters.fit ? 'selected' : ''}`} onClick={() => toggle('fit')} data-testid="toggle-recipe-fit">
             {t.recipes.fitsMacros}
           </button>
         </div>
@@ -2226,11 +2263,15 @@ function RecipeSection({
           <div className="field" style={{ marginBottom: 14 }}>
             <label>{t.recipes.markAvailable}</label>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
-              {recipeFoods.map(f => (
-                <button 
-                  type = 'button'
-                  className={`tab ${availableIds.includes(f.id) ? 'selected' : ''}`} key={f.id} onClick={() => setAvailableIds(availableIds.includes(f.id) ? availableIds.filter(x => x !== f.id) : [...availableIds, f.id])} data-testid={`toggle-pantry-food-${f.id}`}>
-                  {foodDisplayName(f.id, f.name, lang)}
+              {recipeFoods.map(item => (
+                <button
+                  type="button"
+                  className={`tab ${availableNames.includes(item.key) ? 'selected' : ''}`}
+                  key={item.key}
+                  onClick={() => setAvailableNames(availableNames.includes(item.key) ? availableNames.filter(x => x !== item.key) : [...availableNames, item.key])}
+                  data-testid={`toggle-pantry-food-${item.key}`}
+                >
+                  {item.label}
                 </button>
               ))}
             </div>
@@ -2247,11 +2288,15 @@ function RecipeSection({
         <div className="field" style={{ marginTop: 14 }}>
           <label>{t.recipes.excludeFoods}</label>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
-            {recipeFoods.map(f => (
+            {recipeFoods.map(item => (
               <button
-                type = 'button'
-                className={`tab ${excluded.includes(f.id) ? 'selected' : ''}`} key={f.id} onClick={() => setExcluded(excluded.includes(f.id) ? excluded.filter(x => x !== f.id) : [...excluded, f.id])} data-testid={`toggle-exclude-food-${f.id}`}>
-                {foodDisplayName(f.id, f.name, lang)}
+                type="button"
+                className={`tab ${excludedNames.includes(item.key) ? 'selected' : ''}`}
+                key={item.key}
+                onClick={() => setExcludedNames(excludedNames.includes(item.key) ? excludedNames.filter(x => x !== item.key) : [...excludedNames, item.key])}
+                data-testid={`toggle-exclude-food-${item.key}`}
+              >
+                {item.label}
               </button>
             ))}
           </div>
