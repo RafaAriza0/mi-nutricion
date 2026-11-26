@@ -7,7 +7,7 @@ import { bedcaFoods, bedcaRecipes } from './lib/bedca-catalog';
 import { lookupOpenFoodFactsProduct, type OpenFoodFactsProduct } from './lib/openfoodfacts';
 import { clearPersonalStore, loadCloudStore, loadStore, saveCloudStore, saveStore } from './lib/storage';
 import { supabase } from './lib/supabase';
-import { getLocale, labelCategory, labelMeal, translations, useLang } from './lib/i18n';
+import { foodDisplayName, getLocale, labelCategory, labelMeal, recipeDisplay, translations as i18n, useLang } from './lib/i18n';
 import AuthGate from './components/AuthGate';
 import ProfileOnboarding from './components/ProfileOnboarding';
 import MealEntryPicker, { type MealEntryOption } from './components/MealEntryPicker';
@@ -29,7 +29,7 @@ function calculateDishNutrients(dish: Dish, foods: Food[]): Nutrients {
 function App() {
   const [lang, setLang] = useLang();
   const isEn = lang === 'en';
-  const t = translations[lang];
+  const t = i18n[lang];
   const locale = getLocale(lang);
 
   const navItems = useMemo(
@@ -83,7 +83,7 @@ function App() {
   const visibleFoods = useMemo(
     () =>
       allFoods
-        .filter(f => f.name.toLocaleLowerCase(locale).includes(search.toLocaleLowerCase(locale)))
+        .filter(f => foodDisplayName(f.id, f.name, lang).toLocaleLowerCase(locale).includes(search.trim().toLocaleLowerCase(locale)))
         .filter(f => foodMatchesCategory(f, foodCategory))
         .filter(
           f =>
@@ -94,7 +94,7 @@ function App() {
             (filter === 'BEDCA' && f.catalog) ||
             (filter === 'Ejemplos' && f.demo)
         ),
-    [allFoods, search, locale, filter, foodCategory, store.favorites, store.recent]
+    [allFoods, search, lang, locale, filter, foodCategory, store.favorites, store.recent]
   );
 
   useEffect(() => {
@@ -182,11 +182,17 @@ function App() {
   };
 
   const logOptions = useMemo<MealEntryOption[]>(() => {
+    const unitEnMap: Record<string, string> = {
+      unidad: 'unit',
+      rebanada: 'slice',
+      ración: 'serving',
+      cucharadita: 'teaspoon',
+    };
     const foodOptions: MealEntryOption[] = allFoods.map(food => ({
       key: `food:${food.id}`,
       id: food.id,
       kind: 'food',
-      name: food.name,
+      name: foodDisplayName(food.id, food.name, lang),
       source: food.catalog
         ? 'BEDCA'
         : food.demo
@@ -198,7 +204,7 @@ function App() {
         : 'Alimento personal',
       nutrients: food,
       gramsPerUnit: food.gramsPerUnit,
-      unit: food.unit,
+      unit: isEn && food.unit !== 'g' ? (unitEnMap[food.unit] ?? food.unit) : food.unit,
       demo: food.demo,
     }));
     const dishOptions: MealEntryOption[] = store.dishes.map(dish => ({
@@ -231,11 +237,12 @@ function App() {
           : isEn
           ? 'Free choice'
           : 'Elección libre';
+        const rDisp = recipeDisplay(recipe, lang);
         return {
           key: `recipe:${recipe.id}`,
           id: recipe.id,
           kind: 'recipe' as const,
-          name: recipe.name,
+          name: rDisp.name,
           source: recipe.demo
             ? isEn
               ? 'Suggested recipe · sample'
@@ -244,7 +251,7 @@ function App() {
             ? 'Suggested recipe · BEDCA'
             : 'Receta sugerida · BEDCA',
           nutrients,
-          tags: recipe.tags,
+          tags: rDisp.tags,
           compatibility: `${prefLabel} · ${fitLabel}`,
           demo: recipe.demo,
         };
@@ -260,7 +267,7 @@ function App() {
       key: `history:${entry.id}`,
       id: entry.foodId,
       kind: 'history',
-      name: entry.name,
+      name: foodDisplayName(entry.foodId, entry.name, lang),
       source: entry.foodId.startsWith('dish:')
         ? isEn
           ? 'Dish from history'
@@ -271,7 +278,7 @@ function App() {
       nutrients: nutrientsPerServing(entry),
     }));
     return [...foodOptions, ...dishOptions, ...recipeOptions, ...historyOptions];
-  }, [allFoods, isEn, profile?.avoid, profile?.preferences, remaining, store.dishes, store.logs]);
+  }, [allFoods, isEn, lang, profile?.avoid, profile?.preferences, remaining, store.dishes, store.logs]);
 
   function openFood(food?: Food) {
     setEditId(food?.id ?? null);
@@ -438,6 +445,7 @@ function App() {
         notify(isEn ? 'Food not found.' : 'No encontramos este alimento.');
         return;
       }
+      const displayName = foodDisplayName(food.id, food.name, lang);
       const grams = unit === 'ud' ? amount * food.gramsPerUnit : amount;
       const nutrients = scaled(food, grams);
       update(s => {
@@ -454,8 +462,8 @@ function App() {
       setModal(null);
       notify(
         isEn
-          ? `${food.name} added to ${labelMeal(meal, lang).toLowerCase()}.`
-          : `${food.name} añadido a ${meal.toLowerCase()}.`
+          ? `${displayName} added to ${labelMeal(meal, lang).toLowerCase()}.`
+          : `${displayName} añadido a ${meal.toLowerCase()}.`
       );
       return;
     }
@@ -494,7 +502,8 @@ function App() {
   function deleteLog(logId: string) {
     const entry = store.logs.find(l => l.id === logId);
     if (!entry) return;
-    const msg = isEn ? `Delete entry for ${entry.name}?` : `¿Eliminar el registro de ${entry.name}?`;
+    const entryName = foodDisplayName(entry.foodId, entry.name, lang);
+    const msg = isEn ? `Delete entry for ${entryName}?` : `¿Eliminar el registro de ${entryName}?`;
     if (!window.confirm(msg)) return;
     update(s => ({ ...s, logs: s.logs.filter(l => l.id !== logId) }));
     notify(isEn ? 'Entry deleted.' : 'Registro eliminado.');
@@ -503,11 +512,12 @@ function App() {
   function moveLog(logId: string, meal: Meal) {
     const entry = store.logs.find(l => l.id === logId);
     if (!entry || entry.meal === meal) return;
+    const entryName = foodDisplayName(entry.foodId, entry.name, lang);
     update(s => ({ ...s, logs: moveLogEntry(s.logs, logId, meal) }));
     notify(
       isEn
-        ? `${entry.name} moved to ${labelMeal(meal, lang).toLowerCase()}.`
-        : `${entry.name} movido a ${meal.toLowerCase()}.`
+        ? `${entryName} moved to ${labelMeal(meal, lang).toLowerCase()}.`
+        : `${entryName} movido a ${meal.toLowerCase()}.`
     );
   }
 
@@ -1570,7 +1580,7 @@ function App() {
                         .filter(f => foodMatchesCategory(f, ingredientCategory))
                         .map(f => (
                           <option key={f.id} value={f.id}>
-                            {f.name}
+                            {foodDisplayName(f.id, f.name, lang)}
                           </option>
                         ))}
                     </select>
@@ -1593,7 +1603,7 @@ function App() {
                 {dishDraft.ingredients.map((ing, i) => (
                   <div className="list-row" key={`${ing.foodId}-${i}`}>
                     <span>
-                      {foodById(ing.foodId, allFoods)?.name} · {ing.grams} g
+                      {foodDisplayName(ing.foodId, foodById(ing.foodId, allFoods)?.name ?? '', lang)} · {ing.grams} g
                     </span>
                     <button
                       className="icon-button"
@@ -1686,7 +1696,7 @@ function dateFromKey(value: string) {
 function WeekCalendar({ date, setDate, loggedDates }: { date: string; setDate: (date: string) => void; loggedDates: ReadonlySet<string> }) {
   const [lang] = useLang();
   const isEn = lang === 'en';
-  const t = translations[lang];
+  const t = i18n[lang];
   const locale = getLocale(lang);
   const days = weekDateKeys(date).map(dateFromKey);
   const currentDate = today();
@@ -1805,7 +1815,7 @@ function TodayPage({
 }) {
   const [lang] = useLang();
   const isEn = lang === 'en';
-  const t = translations[lang];
+  const t = i18n[lang];
   const locale = getLocale(lang);
 
   const dragPointer = useRef<{ logId: string; pointerId: number; startX: number; startY: number; moved: boolean } | null>(null);
@@ -1946,50 +1956,53 @@ function TodayPage({
                   </button>
                 </div>
                 {list.length > 0
-                  ? list.map(l => (
-                      <div className={`food-row${draggingLogId === l.id ? ' is-dragging' : ''}`} key={l.id}>
-                        <div style={{ minWidth: 0, flex: 1 }}>
-                          <b style={{ fontSize: 13 }}>{l.name}</b>
-                          <div className="small-text muted">
-                            {l.grams ? `${fmt(l.grams)} g` : `${fmt(l.amount)} ${l.unit === 'ud' ? t.today.servingsUnit : 'g'}`} · {fmt(l.nutrients.kcal)} kcal{' '}
-                            {l.demo && (
-                              <span className="pill demo-pill" style={{ marginLeft: 5 }}>
-                                {t.today.demoTag}
-                              </span>
-                            )}
+                  ? list.map(l => {
+                      const entryName = foodDisplayName(l.foodId, l.name, lang);
+                      return (
+                        <div className={`food-row${draggingLogId === l.id ? ' is-dragging' : ''}`} key={l.id}>
+                          <div style={{ minWidth: 0, flex: 1 }}>
+                            <b style={{ fontSize: 13 }}>{entryName}</b>
+                            <div className="small-text muted">
+                              {l.grams ? `${fmt(l.grams)} g` : `${fmt(l.amount)} ${l.unit === 'ud' ? t.today.servingsUnit : 'g'}`} · {fmt(l.nutrients.kcal)} kcal{' '}
+                              {l.demo && (
+                                <span className="pill demo-pill" style={{ marginLeft: 5 }}>
+                                  {t.today.demoTag}
+                                </span>
+                              )}
+                            </div>
+                            <NutrientSummary nutrients={l.nutrients} label={entryName} />
                           </div>
-                          <NutrientSummary nutrients={l.nutrients} label={l.name} />
+                          <div className="food-row-actions">
+                            <button
+                              type="button"
+                              id={`drag-log-${l.id}`}
+                              className="log-drag-handle"
+                              aria-label={`${isEn ? 'Move' : 'Mover'} ${entryName}`}
+                              aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight"
+                              onPointerDown={event => startLogDrag(l.id, event)}
+                              onPointerMove={continueLogDrag}
+                              onPointerUp={finishLogDrag}
+                              onPointerCancel={cancelLogDrag}
+                              onKeyDown={event => {
+                                if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') {
+                                  event.preventDefault();
+                                  moveByKeyboard(l.id, l.meal, -1);
+                                } else if (event.key === 'ArrowDown' || event.key === 'ArrowRight') {
+                                  event.preventDefault();
+                                  moveByKeyboard(l.id, l.meal, 1);
+                                }
+                              }}
+                              data-testid={`button-drag-log-${l.id}`}
+                            >
+                              <GripVertical size={18} />
+                            </button>
+                            <button className="icon-button" aria-label={`${isEn ? 'Delete' : 'Eliminar'} ${entryName}`} onClick={() => onDelete(l.id)} data-testid={`button-delete-log-${l.id}`}>
+                              <X size={15} />
+                            </button>
+                          </div>
                         </div>
-                        <div className="food-row-actions">
-                          <button
-                            type="button"
-                            id={`drag-log-${l.id}`}
-                            className="log-drag-handle"
-                            aria-label={`${isEn ? 'Move' : 'Mover'} ${l.name}`}
-                            aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight"
-                            onPointerDown={event => startLogDrag(l.id, event)}
-                            onPointerMove={continueLogDrag}
-                            onPointerUp={finishLogDrag}
-                            onPointerCancel={cancelLogDrag}
-                            onKeyDown={event => {
-                              if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') {
-                                event.preventDefault();
-                                moveByKeyboard(l.id, l.meal, -1);
-                              } else if (event.key === 'ArrowDown' || event.key === 'ArrowRight') {
-                                event.preventDefault();
-                                moveByKeyboard(l.id, l.meal, 1);
-                              }
-                            }}
-                            data-testid={`button-drag-log-${l.id}`}
-                          >
-                            <GripVertical size={18} />
-                          </button>
-                          <button className="icon-button" aria-label={`${isEn ? 'Delete' : 'Eliminar'} ${l.name}`} onClick={() => onDelete(l.id)} data-testid={`button-delete-log-${l.id}`}>
-                            <X size={15} />
-                          </button>
-                        </div>
-                      </div>
-                    ))
+                      );
+                    })
                   : null}
               </div>
             );
@@ -2013,25 +2026,28 @@ function TodayPage({
             </button>
           </div>
           {recs.length ? (
-            recs.map(({ recipe, perServing, preferred, fits }) => (
-              <article className="today-recipe-card" key={recipe.id} data-testid={`card-today-recipe-${recipe.id}`}>
-                <div className="today-recipe-heading">
-                  <div className="today-recipe-copy">
-                    <b>{recipe.name}</b>
-                    <span className="small-text muted">
-                      {recipe.minutes} min{preferred ? ` · ${t.today.matchesPrefs}` : ''}
-                    </span>
+            recs.map(({ recipe, perServing, preferred, fits }) => {
+              const rDisp = recipeDisplay(recipe, lang);
+              return (
+                <article className="today-recipe-card" key={recipe.id} data-testid={`card-today-recipe-${recipe.id}`}>
+                  <div className="today-recipe-heading">
+                    <div className="today-recipe-copy">
+                      <b>{rDisp.name}</b>
+                      <span className="small-text muted">
+                        {recipe.minutes} min{preferred ? ` · ${t.today.matchesPrefs}` : ''}
+                      </span>
+                    </div>
+                    <div className="today-recipe-actions">
+                      <span className="pill">{fits ? t.today.canFit : t.today.freeChoice}</span>
+                      <button type="button" className="button secondary small" aria-label={`${t.today.addBtn} ${rDisp.name}`} onClick={() => onRecipe(recipe)} data-testid={`button-log-suggested-recipe-${recipe.id}`}>
+                        {t.today.addBtn}
+                      </button>
+                    </div>
                   </div>
-                  <div className="today-recipe-actions">
-                    <span className="pill">{fits ? t.today.canFit : t.today.freeChoice}</span>
-                    <button type="button" className="button secondary small" aria-label={`${t.today.addBtn} ${recipe.name}`} onClick={() => onRecipe(recipe)} data-testid={`button-log-suggested-recipe-${recipe.id}`}>
-                      {t.today.addBtn}
-                    </button>
-                  </div>
-                </div>
-                <NutrientSummary nutrients={perServing} label={recipe.name} />
-              </article>
-            ))
+                  <NutrientSummary nutrients={perServing} label={rDisp.name} />
+                </article>
+              );
+            })
           ) : (
             <Empty title={t.today.noExactSuggestions} text={t.today.noExactSuggestionsText} />
           )}
@@ -2077,18 +2093,20 @@ function TodayPage({
 function FoodRow({ food, favorite, onFavorite, onEdit, onDelete, onAdd }: { food: Food; favorite: boolean; onFavorite: () => void; onEdit: () => void; onDelete: () => void; onAdd: () => void }) {
   const [lang] = useLang();
   const isEn = lang === 'en';
+  const displayName = foodDisplayName(food.id, food.name, lang);
+  const displaySource = food.source.startsWith('Ejemplo orientativo') && isEn ? 'Sample reference' : food.source;
   return (
     <div className="list-row" data-testid={`row-food-${food.id}`}>
       <div style={{ minWidth: 0 }}>
         <div style={{ display: 'flex', gap: 7, alignItems: 'center', flexWrap: 'wrap' }}>
-          <b>{food.name}</b>
+          <b>{displayName}</b>
           {food.category && <span className="pill">{labelCategory(food.category, lang)}</span>}
           {food.catalog && <span className="pill">BEDCA</span>}
           {food.demo && <span className="pill demo-pill">{isEn ? 'Sample' : 'Ejemplo'}</span>}
           {food.source.startsWith('Open Food Facts') && <span className="pill demo-pill">{isEn ? 'Label checked' : 'Etiqueta revisada'}</span>}
         </div>
         <div className="small-text muted">
-          {fmt(food.kcal)} kcal · P {food.protein.toFixed(1)} · C {food.carbs.toFixed(1)} · {isEn ? 'F' : 'G'} {food.fat.toFixed(1)} g / 100 g · {food.source}
+          {fmt(food.kcal)} kcal · P {food.protein.toFixed(1)} · C {food.carbs.toFixed(1)} · {isEn ? 'F' : 'G'} {food.fat.toFixed(1)} g / 100 g · {displaySource}
         </div>
         <div className="small-text muted">
           {isEn ? 'Reviewed' : 'Revisado'}: {food.reviewed}
@@ -2101,10 +2119,10 @@ function FoodRow({ food, favorite, onFavorite, onEdit, onDelete, onAdd }: { food
         </button>
         {!food.demo && !food.catalog && (
           <>
-            <button className="icon-button" onClick={onEdit} aria-label={`${isEn ? 'Edit' : 'Editar'} ${food.name}`} data-testid={`button-edit-food-${food.id}`}>
+            <button className="icon-button" onClick={onEdit} aria-label={`${isEn ? 'Edit' : 'Editar'} ${displayName}`} data-testid={`button-edit-food-${food.id}`}>
               <Settings2 size={16} />
             </button>
-            <button className="icon-button" onClick={onDelete} aria-label={`${isEn ? 'Delete' : 'Eliminar'} ${food.name}`} data-testid={`button-delete-food-${food.id}`}>
+            <button className="icon-button" onClick={onDelete} aria-label={`${isEn ? 'Delete' : 'Eliminar'} ${displayName}`} data-testid={`button-delete-food-${food.id}`}>
               <Trash2 size={16} />
             </button>
           </>
@@ -2142,7 +2160,7 @@ function RecipeSection({
 }) {
   const [lang] = useLang();
   const isEn = lang === 'en';
-  const t = translations[lang];
+  const t = i18n[lang];
 
   const [availableIds, setAvailableIds] = useState<string[]>([]);
   const [availableOnly, setAvailableOnly] = useState(false);
@@ -2199,7 +2217,7 @@ function RecipeSection({
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
               {foods.map(f => (
                 <button className={`tab ${availableIds.includes(f.id) ? 'selected' : ''}`} key={f.id} onClick={() => setAvailableIds(availableIds.includes(f.id) ? availableIds.filter(x => x !== f.id) : [...availableIds, f.id])} data-testid={`toggle-pantry-food-${f.id}`}>
-                  {f.name}
+                  {foodDisplayName(f.id, f.name, lang)}
                 </button>
               ))}
             </div>
@@ -2218,7 +2236,7 @@ function RecipeSection({
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
             {foods.map(f => (
               <button className={`tab ${excluded.includes(f.id) ? 'selected' : ''}`} key={f.id} onClick={() => setExcluded(excluded.includes(f.id) ? excluded.filter(x => x !== f.id) : [...excluded, f.id])} data-testid={`toggle-exclude-food-${f.id}`}>
-                {f.name}
+                {foodDisplayName(f.id, f.name, lang)}
               </button>
             ))}
           </div>
@@ -2234,21 +2252,22 @@ function RecipeSection({
           const n = recipeNutrition(r, foods);
           const each = { kcal: n.kcal / r.servings, protein: n.protein / r.servings, carbs: n.carbs / r.servings, fat: n.fat / r.servings };
           const fits = recipeFit(each, remaining);
+          const rDisp = recipeDisplay(r, lang);
           return (
             <article className="card recipe-card" key={r.id} data-testid={`card-recipe-${r.id}`}>
               <div className="recipe-card-meta">
-                <div className="eyebrow">{r.tags.join(' · ')}</div>
+                <div className="eyebrow">{rDisp.tags.join(' · ')}</div>
                 <span className={`pill ${r.demo ? 'demo-pill' : ''}`}>{r.demo ? (isEn ? 'Sample reference' : 'Ejemplo orientativo') : isEn ? 'Calculated with BEDCA' : 'Calculado con BEDCA'}</span>
               </div>
-              <h2 className="serif recipe-card-title">{r.name}</h2>
-              <p className="small-text muted recipe-card-description">{r.description}</p>
-              <NutrientSummary nutrients={each} label={r.name} />
+              <h2 className="serif recipe-card-title">{rDisp.name}</h2>
+              <p className="small-text muted recipe-card-description">{rDisp.description}</p>
+              <NutrientSummary nutrients={each} label={rDisp.name} />
               <div className="small-text muted recipe-card-time">
                 <Clock3 size={13} style={{ verticalAlign: '-2px' }} /> {r.minutes} min{r.cost !== undefined ? ` · €${r.cost.toFixed(2)} ${isEn ? 'approx.' : 'aprox.'}` : ''} · {r.servings}{' '}
                 {r.servings === 1 ? (isEn ? 'serving' : 'ración') : isEn ? 'servings' : 'raciones'}
               </div>
               <div className="small-text muted recipe-card-ingredients">
-                {isEn ? 'Ingredients' : 'Ingredientes'}: {r.ingredients.map(i => `${foodById(i.foodId, foods)?.name ?? (isEn ? 'Food' : 'Alimento')} (${fmt(i.grams)} g)`).join(', ')}.
+                {isEn ? 'Ingredients' : 'Ingredientes'}: {r.ingredients.map(i => `${foodDisplayName(i.foodId, foodById(i.foodId, foods)?.name ?? (isEn ? 'Food' : 'Alimento'), lang)} (${fmt(i.grams)} g)`).join(', ')}.
               </div>
               <div className="recipe-card-footer">
                 <button className="icon-button" onClick={() => onToggleFavorite(r.id)} aria-label={isEn ? 'Favorite recipe' : 'Guardar receta favorita'} data-testid={`button-favorite-recipe-${r.id}`}>
@@ -2275,7 +2294,7 @@ function RecipeSection({
 function Stats({ store, mode, goal, onRemoveWeight }: { store: Store; mode: 'Semana' | 'Mes'; goal: ReturnType<typeof targets>; onRemoveWeight: (id: string) => void }) {
   const [lang] = useLang();
   const isEn = lang === 'en';
-  const t = translations[lang];
+  const t = i18n[lang];
   const locale = getLocale(lang);
 
   const days = mode === 'Semana' ? 7 : 30;

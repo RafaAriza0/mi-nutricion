@@ -1,3 +1,4 @@
+import { foodDisplayName, getLocale, labelCategory, labelMeal, recipeDisplay, translations, useLang } from './lib/i18n';
 import { useEffect, useState } from 'react';
 import type { FoodCategory, Meal, Profile } from './domain';
 
@@ -416,3 +417,166 @@ export const translations = {
     },
   },
 } as const;
+
+const foodNamesEn: Record<string, string> = {
+  // Demo foods
+  'demo-oats': 'Rolled oats',
+  'demo-yogurt': 'Plain yogurt',
+  'demo-banana': 'Banana',
+  'demo-egg': 'Egg',
+  'demo-tomato': 'Tomato',
+  'demo-bread': 'Whole wheat bread',
+  'demo-chicken': 'Chicken breast',
+  'demo-rice': 'Cooked brown rice',
+  'demo-spinach': 'Spinach',
+  'demo-lentils': 'Cooked lentils',
+  'demo-avocado': 'Avocado',
+  'demo-olive': 'Olive oil',
+  // BEDCA foods
+  'bedca-1010': 'Oats, raw',
+  'bedca-2245': 'Banana',
+  'bedca-2126': 'Chicken egg, boiled, hard',
+  'bedca-2421': 'Tomato',
+  'bedca-2163': 'Whole wheat bread',
+  'bedca-2297': 'Chicken, breast, grilled',
+  'bedca-1009': 'Brown rice, boiled',
+  'bedca-2395': 'Spinach, boiled',
+  'bedca-1065': 'Lentils, dried, raw',
+  'bedca-2216': 'Avocado',
+  'bedca-2543': 'Olive oil',
+  'bedca-2404': 'Potato, boiled',
+  'bedca-2424': 'Carrot, raw',
+  'bedca-1020': 'Chickpeas, dried, raw',
+  'bedca-2520': 'Greek yogurt',
+  'bedca-2376': 'Zucchini',
+  'bedca-2407': 'Cucumber',
+  'bedca-2507': 'Burgos fresh cheese',
+  'bedca-2409': 'Red bell pepper, raw',
+  'bedca-742': 'Tuna, baked',
+  'bedca-731': 'Sweet potato, raw',
+  'bedca-795': 'Cod, fresh, baked',
+  'bedca-838': 'Monkfish, grilled',
+  'bedca-896': 'Almonds, raw',
+  'bedca-934': 'Fresh goat cheese',
+  'bedca-953': 'Bulgarian yogurt',
+  'bedca-961': 'Pork, tenderloin, roasted',
+  'bedca-984': 'Beef, tenderloin, roasted',
+  'bedca-990': 'Turkey, skinless breast, grilled',
+  'bedca-1045': 'Frozen peas, boiled',
+  'bedca-1072': 'Egg pasta, boiled',
+  'bedca-1076': 'Whole wheat pasta, boiled',
+  'bedca-1083': 'Quinoa, raw',
+  'bedca-1121': 'Tofu',
+  'bedca-1126': 'Lentils, canned',
+  'bedca-1143': 'Enriched plain yogurt',
+  'bedca-1172': 'Plum with skin, raw',
+  'bedca-1173': 'Egg white, raw',
+  'bedca-1176': 'Artichoke, raw',
+  'bedca-1177': 'Broccoli, raw',
+  'bedca-1179': 'Green asparagus',
+  'bedca-1180': 'Brussels sprouts, raw',
+  'bedca-1186': 'Mango, raw',
+  'bedca-2133': 'Tuna, canned in water',
+  'bedca-2193': 'Peas, canned',
+  'bedca-2198': 'Green beans, raw',
+  'bedca-2201': 'Walnut',
+  'bedca-2220': 'Cherry',
+  'bedca-2225': 'Strawberry',
+  'bedca-2226': 'Pomegranate',
+  'bedca-2228': 'Kiwi',
+  'bedca-2333': 'Sea bream, grilled',
+  'bedca-2344': 'Sea bass',
+  'bedca-2347': 'Fresh hake',
+  'bedca-2368': 'Blueberry',
+  'bedca-2370': 'Eggplant',
+  'bedca-2372': 'Broccoli, boiled',
+  'bedca-2382': 'Onion, roasted',
+  'bedca-2384': 'Mushroom',
+  'bedca-2386': 'White cabbage, raw',
+  'bedca-2387': 'Cauliflower, boiled',
+  'bedca-2399': 'Lettuce',
+  'bedca-2493': 'Cow milk, whole',
+  'bedca-2510': 'Mozzarella cheese',
+  'bedca-2517': 'Cottage / ricotta cheese',
+  'bedca-2530': 'Skimmed plain yogurt',
+  'bedca-2626': 'Salmon',
+  'bedca-2627': 'Smoked salmon',
+  'bedca-2631': 'Sardine, roasted',
+  'bedca-2636': 'Trout',
+};
+
+const recipesEn: Record<string, { name: string; description: string }> = {
+  'rec-oats': {
+    name: 'Creamy oats with banana',
+    description: 'A simple breakfast to fuel an active morning.',
+  },
+  'rec-toast': {
+    name: 'Toast with egg and tomato',
+    description: 'A warm, filling, and easy-to-prepare combination.',
+  },
+  'rec-bowl': {
+    name: 'Chicken and rice bowl',
+    description: 'Protein and energy in an everyday dish.',
+  },
+  'rec-lentils': {
+    name: 'Lentils with spinach',
+    description: 'A plant-based pantry staple for any day.',
+  },
+  'rec-avocado': {
+    name: 'Green avocado toast',
+    description: 'A fresh snack made with familiar ingredients.',
+  },
+  'bedca-recipe-oats-yogurt': {
+    name: 'Oats with banana and Greek yogurt',
+    description: 'Mix the oats and yogurt; top with banana. Weights correspond to ingredients before serving.',
+  },
+  'bedca-recipe-chicken-rice': {
+    name: 'Brown rice with chicken and zucchini',
+    description: 'Sauté the zucchini in olive oil and serve with boiled rice and grilled chicken breast. Rice and chicken are weighed cooked.',
+  },
+  'bedca-recipe-lentils': {
+    name: 'Lentils with tomato and carrot',
+    description: 'Simmer the lentils and vegetables until tender. Lentils are weighed dry before cooking; water is excluded from the calculation.',
+  },
+  'bedca-recipe-chickpeas': {
+    name: 'Chickpeas with spinach and tomato',
+    description: 'Cook the chickpeas and serve with spinach and tomato. Chickpeas are weighed dry before cooking; water is excluded from the calculation.',
+  },
+  'bedca-recipe-toast': {
+    name: 'Whole wheat toast with avocado, tomato, and egg',
+    description: 'Toast the bread and top with avocado, tomato, and boiled egg.',
+  },
+  'bedca-recipe-potato-egg': {
+    name: 'Potato with egg and spinach',
+    description: 'Combine boiled potato and egg with spinach; drizzle with olive oil when serving.',
+  },
+};
+
+const tagEnMap: Record<string, string> = {
+  Desayuno: 'Breakfast',
+  Comida: 'Lunch',
+  Cena: 'Dinner',
+  Tentempié: 'Snack',
+  Vegetariano: 'Vegetarian',
+  Rápido: 'Quick',
+  'Sin gluten': 'Gluten-free',
+};
+
+export function foodDisplayName(foodId: string, fallbackName: string, lang: Lang): string {
+  if (lang !== 'en') return fallbackName;
+  const cleanId = foodId.replace(/^(food|recipe|dish):/, '');
+  return foodNamesEn[cleanId] ?? recipesEn[cleanId]?.name ?? fallbackName;
+}
+
+export function recipeDisplay(
+  recipe: { id: string; name: string; description: string; tags: string[] },
+  lang: Lang
+): { name: string; description: string; tags: string[] } {
+  if (lang !== 'en') return { name: recipe.name, description: recipe.description, tags: recipe.tags };
+  const translated = recipesEn[recipe.id];
+  return {
+    name: translated?.name ?? recipe.name,
+    description: translated?.description ?? recipe.description,
+    tags: recipe.tags.map(tag => tagEnMap[tag] ?? tag),
+  };
+}
