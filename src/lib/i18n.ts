@@ -1,4 +1,3 @@
-import { foodDisplayName, getLocale, labelCategory, labelMeal, recipeDisplay, translations, useLang } from './lib/i18n';
 import { useEffect, useState } from 'react';
 import type { FoodCategory, Meal, Profile } from './domain';
 
